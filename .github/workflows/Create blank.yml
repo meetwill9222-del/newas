@@ -1,8 +1,6 @@
-name: working tutorial 2
+name: Create blank
 
 on:
-  # schedule:
-  #   - cron: '*/10 * * * *' # Every 10 minutes
   workflow_dispatch: # Allows manual trigger
 
 jobs:

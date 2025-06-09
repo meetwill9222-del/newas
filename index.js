@@ -319,7 +319,7 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
     // Simulate human-like click
     await page.click('#myLink', { delay: 200 });
 
-    await page.waitForNavigation({ waitUntil: 'domcontentloaded' });
+    //await page.waitForNavigation({ waitUntil: 'domcontentloaded' });
 
     console.log('📜 Scrolling through page like a human...');
     await humanScroll(page);
@@ -339,5 +339,15 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
   }
 }
 
-
 run();
+
+// (async () => {
+//   const numInstances = 2; // Number of browsers to run in parallel
+//   const runs = [];
+
+//   for (let i = 0; i < numInstances; i++) {
+//     runs.push(run());
+//   }
+
+//   await Promise.all(runs);
+// })();

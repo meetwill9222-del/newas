@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer');
 
 (async () => {
-  const proxy = 'http://47.254.127.197:3128'; // Replace with your actual proxy
+  const proxy = 'http://47.251.34.103:3128'; // Replace with your actual proxy
 
   const browser = await puppeteer.launch({
     headless: false, // set to true if you don’t want a visible browser
