@@ -258,8 +258,8 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
 }
 
  async function run() {
-  const proxyJsonFile = 'proxies.json';
-  console.log('📁 Loading proxies from', proxyJsonFile);
+  // const proxyJsonFile = 'proxies.json';
+  // console.log('📁 Loading proxies from', proxyJsonFile);
 
   // const proxies = JSON.parse(fs.readFileSync(proxyJsonFile, 'utf-8'));
 
@@ -276,6 +276,7 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
 
   // current = (current + 1) % proxies.length;
 
+  // FROM HERE
   const proxyLines = fs.readFileSync('proxies.txt', 'utf-8')
   .split('\n')
   .map(line => line.trim())
@@ -284,22 +285,26 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
   const proxy = getRandomFromArray(proxyLines);
   console.log(proxy);
 
+  // const proxy ="http://p.webshare.io:80";
+  // const username="deckfmwj-rotate";
+  // const pass="znhe1al5olcm";
+
   const userAgent = getCustomUserAgent();
   const category = getRandomFromArray(categories);
   const cookies = generateCookies(category);
 
   console.log(`🧠 Selected category: ${category}`);
   console.log(`🕵️‍♂️ Using User-Agent: ${userAgent}`);
-
+  puppeteer.use(StealthPlugin());
   const browser = await puppeteer.launch({
     headless: false,
-    args: [`--proxy-server=${proxy}`, '--no-sandbox', '--disable-setuid-sandbox'],
+    args: [`--proxy-server=${proxy}`, '--no-sandbox', '--disable-setuid-sandbox','--ignore-certificate-errors'],
   });
 
   try {
     const page = await browser.newPage();
     console.log('🧭 Opening new page...');
-
+    // await page.authenticate({ username, pass });
     await page.setUserAgent(userAgent);
     await page.setCookie(...cookies);
     await page.setExtraHTTPHeaders({
@@ -309,15 +314,16 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
     });
 
     console.log('🚀 Navigating to technologymanias.com...');
-    await page.goto('https://www.google.com/url?sa=t&source=web&rct=j&opi=89978449&url=https://www.technologymanias.com/&ved=2ahUKEwjks_u2r-GNAxUKTGwGHSm2C7AQFnoECB0QAQ', {
+    await page.goto('https://www.technologymanias.com/', {
+      waitUntil: "domcontentloaded", // ensures main frame exists
       timeout: 60000,
     });
 
-     await page.setContent(`<a href="https://www.technologymanias.com/" id="myLink">Visit Tech Site</a>`);
-    await page.waitForSelector('#myLink');
+    //  await page.setContent(`<a href="https://www.technologymanias.com/" id="myLink">Visit Tech Site</a>`);
+    // await page.waitForSelector('#myLink');
 
-    // Simulate human-like click
-    await page.click('#myLink', { delay: 200 });
+    // // Simulate human-like click
+    // await page.click('#myLink', { delay: 200 });
 
     //await page.waitForNavigation({ waitUntil: 'domcontentloaded' });
 
@@ -339,15 +345,15 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
   }
 }
 
-run();
+// run();
 
-// (async () => {
-//   const numInstances = 2; // Number of browsers to run in parallel
-//   const runs = [];
+(async () => {
+  const numInstances = 6; // Number of browsers to run in parallel
+  const runs = [];
 
-//   for (let i = 0; i < numInstances; i++) {
-//     runs.push(run());
-//   }
+  for (let i = 0; i < numInstances; i++) {
+    runs.push(run());
+  }
 
-//   await Promise.all(runs);
-// })();
+  await Promise.all(runs);
+})();

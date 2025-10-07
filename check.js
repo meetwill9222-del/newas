@@ -3,9 +3,9 @@ const puppeteer = require('puppeteer');
 const axios = require('axios');
 const path = require('path');
 
-const proxyTxtFile = 'proxies.txt';
+const proxyTxtFile = 'new.txt';
 const proxyJsonFile = 'proxies.json';
-const urlToTest = 'https://www.technologymanias.com';
+const urlToTest = 'https://httpbin.org/';
 
 // Step 1: Load or create JSON proxy list
 let proxies = [];
@@ -61,12 +61,12 @@ async function testProxy(proxyObj) {
       await page.authenticate({ username: proxyParts[2], password: proxyParts[3] });
     }
 
-    await page.goto(urlToTest, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await page.goto(urlToTest, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
     const finalUrl = page.url();
     const latency = Date.now() - start;
 
-    if (finalUrl.includes('technologymanias.com')) {
+    if (finalUrl.includes('httpbin.org')) {
       proxyObj.status = 1;
       proxyObj.latency = latency;
       proxyObj.country = await getCountry(ip);
