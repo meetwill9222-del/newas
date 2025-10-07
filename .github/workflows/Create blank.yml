@@ -1,10 +1,10 @@
 name: Create blank
 
 on:
-  push:
-      branches:
-        - main
-  # workflow_dispatch: # Allows manual trigger
+  # push:
+  #     branches:
+  #       - main
+  workflow_dispatch: # Allows manual trigger
 
 jobs:
   run-script:
