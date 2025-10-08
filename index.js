@@ -361,9 +361,8 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
   console.log(`🕵️‍♂️ Using User-Agent: ${userAgent}`);
   puppeteer.use(StealthPlugin());
   const browser = await puppeteer.launch({
-    executablePath: puppeteer.executablePath(),
     headless: true,
-    args: [ `--proxy-server=${proxy}`, '--no-sandbox', '--disable-setuid-sandbox','--ignore-certificate-errors'],
+    args: [ `--proxy-server=${proxy}`, '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage','--ignore-certificate-errors'],
   });
 
   try {
