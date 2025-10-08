@@ -1,0 +1,29 @@
+{
+  "name": "puppeteer-auto-search",
+  "version": "1.0.0",
+  "description": "Automated Google search and browsing script using Puppeteer with stealth and proxies",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "puppeteer",
+    "automation",
+    "stealth",
+    "google",
+    "scraping",
+    "proxy"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "@faker-js/faker": "^10.0.0",
+    "axios": "^1.7.0",
+    "http-proxy-agent": "^7.0.0",
+    "https-proxy-agent": "^7.0.0",
+    "puppeteer": "^24.23.0",
+    "puppeteer-extra": "^3.3.5",
+    "puppeteer-extra-plugin-stealth": "^2.11.1",
+    "user-agents": "^1.0.101"
+  }
+}

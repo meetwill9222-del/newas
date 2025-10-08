@@ -228,7 +228,7 @@ async function visitRandomTechnologymaniasLinks(page, browser) {
           a.offsetParent !== null &&
           a.href &&
           a.href !== '#' &&
-          a.href.startsWith('https://www.technologymanias.com')
+          a.href.startsWith('https://insurance.technologymanias.com')
         )
         .map(a => a.href)
     );
@@ -335,6 +335,13 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
 
   // const proxy = getRandomFromArray(proxyLines);
   // console.log(proxy);
+  const KeyLines = fs.readFileSync('key.txt', 'utf-8')
+  .split('\n')
+  .map(line => line.trim())
+  .filter(line => line.length > 0);
+
+  const keyword = getRandomFromArray(KeyLines);
+  console.log(keyword);
 
   const proxy = (await (await fetch('https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list/http.txt')).text())
   .split('\n').map(l => l.trim()).filter(Boolean)
@@ -354,8 +361,8 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
   console.log(`🕵️‍♂️ Using User-Agent: ${userAgent}`);
   puppeteer.use(StealthPlugin());
   const browser = await puppeteer.launch({
-    headless: false,
-    args: [`--proxy-server=${proxy}`, '--no-sandbox', '--disable-setuid-sandbox','--ignore-certificate-errors'],
+    headless: true,
+    args: [ `--proxy-server=${proxy}`, '--no-sandbox', '--disable-setuid-sandbox','--ignore-certificate-errors'],
   });
 
   try {
@@ -371,10 +378,65 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
     });
 
     console.log('🚀 Navigating to technologymanias.com...');
-    await page.goto('https://www.technologymanias.com/', {
-      waitUntil: "domcontentloaded", // ensures main frame exists
-      timeout: 60000,
-    });
+
+   // Go to Google
+    // const searchQuery = "auto insurance tips";
+    const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(keyword)}`;
+
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
+    
+     // Wait for Bing results
+      await page.waitForSelector('li.b_algo h2 a', { timeout: 15000 });
+
+      // Get all search result links
+      const links = await page.$$eval('li.b_algo h2 a', anchors => anchors.map(a => a.href));
+      console.log(`🔗 Found ${links.length} Bing search result links`);
+
+      if (links.length > 0) {
+        const randomLink = links[Math.floor(Math.random() * links.length)];
+        console.log(`🎯 Clicking random result: ${randomLink}`);
+
+        // Navigate to the random website
+        await page.goto(randomLink, { waitUntil: 'domcontentloaded' });
+
+        await new Promise(r => setTimeout(r, Math.random() * 1000 + 200));
+
+        // Try to accept cookies
+       try {
+          const clicked = await page.evaluate(() => {
+            const buttons = Array.from(document.querySelectorAll('button'));
+            const consentBtn = buttons.find(b => /accept|agree|ok/i.test(b.innerText));
+            if (consentBtn) {
+              consentBtn.click();
+              return true;
+            }
+            return false;
+          });
+
+          if (clicked) {
+            console.log("✅ Accepted cookie consent");
+            await page.waitForTimeout(Math.random() * 2000 + 500);
+          } else {
+            console.log("ℹ️ No cookie consent button found");
+          }
+        } catch (err) {
+          console.log("⚠️ Error trying to accept cookies:", err.message);
+        }
+
+        // Human-like scrolling (hoomanscroll)
+        //await hoomanscroll(page);
+        await new Promise(r => setTimeout(r, Math.random() * 4000 + 200));
+        console.log(`✅ Finished visiting: ${page.url()}`);
+      } else {
+        console.log('⚠️ No valid search result links found');
+      }
+
+      
+
+      await page.goto('https://insurance.technologymanias.com/', {
+        waitUntil: "domcontentloaded", // ensures main frame exists
+        timeout: 60000,
+      });
 
     //  await page.setContent(`<a href="https://www.technologymanias.com/" id="myLink">Visit Tech Site</a>`);
     // await page.waitForSelector('#myLink');
