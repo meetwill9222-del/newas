@@ -18,3 +18,19 @@ if [[ "$PUPPETEER_CACHE_DIR" != "$XDG_CACHE_HOME/puppeteer" ]]; then
 else
   echo "Puppeteer cache paths are the same, skipping copy"
 fi
+
+# === Debug Info: Where is Puppeteer installed? ===
+echo "==== Puppeteer Debug Info ===="
+echo "Node Modules Puppeteer Path:"
+npm list puppeteer
+
+echo "Puppeteer Cache Dir: $PUPPETEER_CACHE_DIR"
+ls -lah $PUPPETEER_CACHE_DIR || echo "⚠️ No Puppeteer cache dir found"
+
+# === Check if Chrome is installed in cache ===
+if [[ -d "$PUPPETEER_CACHE_DIR/chrome" ]]; then
+  echo "✅ Chrome directory found:"
+  ls -lah "$PUPPETEER_CACHE_DIR/chrome"
+else
+  echo "❌ Chrome directory NOT found in cache"
+fi
