@@ -4,6 +4,7 @@
   "description": "Automated Google search and browsing script using Puppeteer with stealth and proxies",
   "main": "index.js",
   "scripts": {
+    "postinstall": "puppeteer browsers install chrome",
     "start": "node index.js"
   },
   "keywords": [
