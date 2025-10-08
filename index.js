@@ -6,6 +6,7 @@ const fs = require('fs');
 const axios = require('axios');
 const { HttpProxyAgent } = require('http-proxy-agent');
 const { HttpsProxyAgent } = require('https-proxy-agent');
+const path = require('path');
 
 // Apply stealth plugin
 puppeteer.use(StealthPlugin());
