@@ -145,8 +145,77 @@ function getRandomFromArray(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+// async function visitRandomTechnologymaniasLinks(page, browser) {
+//   const repeatCount = getRandomInt(3, 6);
+//   console.log(`🔁 Visiting up to ${repeatCount} technologymanias.com links`);
+
+//   for (let i = 0; i < repeatCount; i++) {
+//     console.log(`\n➡️  Iteration ${i + 1}/${repeatCount} starting...`);
+
+//     // Extract all valid technologymanias.com links
+//     const links = await page.$$eval('a', anchors =>
+//       anchors
+//         .filter(a =>
+//           a.offsetParent !== null &&
+//           a.href &&
+//           a.href !== '#' &&
+//           a.href.startsWith('https://www.technologymanias.com')
+//         )
+//         .map((a, i) => ({ index: i, href: a.href }))
+//     );
+
+//     console.log(`🔗 Found ${links.length} valid technologymanias.com links`);
+
+//     if (links.length) {
+//       const handles = await page.$$('a');
+//       const randomLink = getRandomFromArray(links);
+//       const targetHandle = handles[randomLink.index];
+
+//       console.log(`🎯 Clicking link: ${randomLink.href} (index ${randomLink.index})`);
+
+//       const pagesBefore = await browser.pages();
+
+//       // await targetHandle.click({
+//       //   modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'],
+//       //   delay: 100
+//       // });
+
+//       const pagesAfter = await browser.pages();
+//       const newPage = pagesAfter.find(p => !pagesBefore.includes(p));
+
+//       if (newPage) {
+//         console.log(`🆕 New tab opened.`);
+
+//         await newPage.bringToFront();
+//         try {
+//           await newPage.waitForNavigation({ timeout: 15000, waitUntil: 'domcontentloaded' });
+//           console.log(`✅ New tab URL: ${newPage.url()}`);
+//         } catch (e) {
+//           console.warn(`⚠️  New tab navigation error: ${e.message}`);
+//         }
+
+//         // Scroll main page to simulate activity
+//         console.log(`📜 Scrolling on main page...`);
+//         await humanScroll(page, 5000, 10000);
+
+//         // Random wait between 40s to 60s
+//         const delay = Math.random() * 20000 + 40000;
+//         console.log(`⏱️ Waiting ${Math.round(delay / 1000)} seconds before next iteration...`);
+//         await new Promise(r => setTimeout(r, delay));
+//       } else {
+//         console.warn(`❌ No new tab was opened.`);
+//       }
+
+//     } else {
+//       console.log('🚫 No valid technologymanias.com links found on this page.');
+//     }
+//   }
+
+//   console.log(`🏁 Finished visiting technologymanias links.`);
+// }
+
 async function visitRandomTechnologymaniasLinks(page, browser) {
-  const repeatCount = getRandomInt(3, 6);
+  const repeatCount = getRandomInt(4, 10);
   console.log(`🔁 Visiting up to ${repeatCount} technologymanias.com links`);
 
   for (let i = 0; i < repeatCount; i++) {
@@ -161,58 +230,40 @@ async function visitRandomTechnologymaniasLinks(page, browser) {
           a.href !== '#' &&
           a.href.startsWith('https://www.technologymanias.com')
         )
-        .map((a, i) => ({ index: i, href: a.href }))
+        .map(a => a.href)
     );
 
     console.log(`🔗 Found ${links.length} valid technologymanias.com links`);
 
     if (links.length) {
-      const handles = await page.$$('a');
       const randomLink = getRandomFromArray(links);
-      const targetHandle = handles[randomLink.index];
+      console.log(`🎯 Navigating to: ${randomLink}`);
 
-      console.log(`🎯 Clicking link: ${randomLink.href} (index ${randomLink.index})`);
-
-      const pagesBefore = await browser.pages();
-
-      await targetHandle.click({
-        modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'],
-        delay: 100
-      });
-
-      const pagesAfter = await browser.pages();
-      const newPage = pagesAfter.find(p => !pagesBefore.includes(p));
-
-      if (newPage) {
-        console.log(`🆕 New tab opened.`);
-
-        await newPage.bringToFront();
-        try {
-          await newPage.waitForNavigation({ timeout: 15000, waitUntil: 'domcontentloaded' });
-          console.log(`✅ New tab URL: ${newPage.url()}`);
-        } catch (e) {
-          console.warn(`⚠️  New tab navigation error: ${e.message}`);
-        }
-
-        // Scroll main page to simulate activity
-        console.log(`📜 Scrolling on main page...`);
-        await humanScroll(page, 5000, 10000);
-
-        // Random wait between 40s to 60s
-        const delay = Math.random() * 20000 + 40000;
-        console.log(`⏱️ Waiting ${Math.round(delay / 1000)} seconds before next iteration...`);
-        await new Promise(r => setTimeout(r, delay));
-      } else {
-        console.warn(`❌ No new tab was opened.`);
+      try {
+        await Promise.all([
+          page.waitForNavigation({ timeout: 15000, waitUntil: 'domcontentloaded' }),
+          page.goto(randomLink, { waitUntil: 'domcontentloaded', timeout: 15000 })
+        ]);
+        console.log(`✅ Navigated to: ${page.url()}`);
+      } catch (e) {
+        console.warn(`⚠️ Navigation error: ${e.message}`);
       }
+
+      // Scroll main page to simulate activity
+      console.log(`📜 Scrolling on page...`);
+      await humanScroll(page, 5000, 10000);
+
+      // Random wait between 40s to 60s
+      const delay = Math.random() * 10000 + 20000;
+      console.log(`⏱️ Waiting ${Math.round(delay / 1000)} seconds before next iteration...`);
+      await new Promise(r => setTimeout(r, delay));
 
     } else {
       console.log('🚫 No valid technologymanias.com links found on this page.');
     }
   }
-
-  console.log(`🏁 Finished visiting technologymanias links.`);
 }
+
 
 function getNextStatus1Proxy(proxies) {
   const total = proxies.length;
@@ -277,12 +328,18 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
   // current = (current + 1) % proxies.length;
 
   // FROM HERE
-  const proxyLines = fs.readFileSync('proxies.txt', 'utf-8')
-  .split('\n')
-  .map(line => line.trim())
-  .filter(line => line.length > 0);
+  // const proxyLines = fs.readFileSync('proxies.txt', 'utf-8')
+  // .split('\n')
+  // .map(line => line.trim())
+  // .filter(line => line.length > 0);
 
-  const proxy = getRandomFromArray(proxyLines);
+  // const proxy = getRandomFromArray(proxyLines);
+  // console.log(proxy);
+
+  const proxy = (await (await fetch('https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list/http.txt')).text())
+  .split('\n').map(l => l.trim()).filter(Boolean)
+  [Math.floor(Math.random() * 1000)];
+
   console.log(proxy);
 
   // const proxy ="http://p.webshare.io:80";
@@ -348,7 +405,7 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
 // run();
 
 (async () => {
-  const numInstances = 6; // Number of browsers to run in parallel
+  const numInstances = 5; // Number of browsers to run in parallel
   const runs = [];
 
   for (let i = 0; i < numInstances; i++) {
