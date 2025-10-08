@@ -215,6 +215,32 @@ function getRandomFromArray(arr) {
 //   console.log(`🏁 Finished visiting technologymanias links.`);
 // }
 
+function getChromePath() {
+  const base = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
+  const chromeRoot = path.join(base, 'chrome');
+
+  if (!fs.existsSync(chromeRoot)) {
+    throw new Error(`❌ Chrome root not found: ${chromeRoot}`);
+  }
+
+  // Find available versions
+  const versions = fs.readdirSync(chromeRoot).filter(v => v.startsWith('linux-'));
+  if (!versions.length) {
+    throw new Error(`❌ No Chrome versions found in: ${chromeRoot}`);
+  }
+
+  // Pick latest version
+  const latest = versions.sort().reverse()[0];
+  const chromePath = path.join(chromeRoot, latest, 'chrome-linux64', 'chrome');
+
+  if (!fs.existsSync(chromePath)) {
+    throw new Error(`❌ Chrome binary not found at: ${chromePath}`);
+  }
+
+  console.log(`✅ Using Chrome from: ${chromePath}`);
+  return chromePath;
+}
+
 async function visitRandomTechnologymaniasLinks(page, browser) {
   const repeatCount = getRandomInt(4, 10);
   console.log(`🔁 Visiting up to ${repeatCount} technologymanias.com links`);
@@ -361,15 +387,9 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
   console.log(`🧠 Selected category: ${category}`);
   console.log(`🕵️‍♂️ Using User-Agent: ${userAgent}`);
   puppeteer.use(StealthPlugin());
-  const chromePath = path.join(
-  process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer',
-  'chrome',
-  'linux-141.0.7390.54',
-  'chrome-linux64',
-  'chrome'
-);
+  
   const browser = await puppeteer.launch({
-    executablePath: chromePath,
+    executablePath: getChromePath(),
     headless: true,
     args: [ `--proxy-server=${proxy}`, '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage','--ignore-certificate-errors'],
   });
