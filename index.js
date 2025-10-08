@@ -360,7 +360,15 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
   console.log(`🧠 Selected category: ${category}`);
   console.log(`🕵️‍♂️ Using User-Agent: ${userAgent}`);
   puppeteer.use(StealthPlugin());
+  const chromePath = path.join(
+  process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer',
+  'chrome',
+  'linux-141.0.7390.54',
+  'chrome-linux64',
+  'chrome'
+);
   const browser = await puppeteer.launch({
+    executablePath: chromePath,
     headless: true,
     args: [ `--proxy-server=${proxy}`, '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage','--ignore-certificate-errors'],
   });
