@@ -467,7 +467,7 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
 // run();
 
 (async () => {
-  const numInstances = 5; // Number of browsers to run in parallel
+  const numInstances = 10; // Number of browsers to run in parallel
   const runs = [];
 
   for (let i = 0; i < numInstances; i++) {
