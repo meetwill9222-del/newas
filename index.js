@@ -7,6 +7,7 @@ const axios = require('axios');
 const { HttpProxyAgent } = require('http-proxy-agent');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const path = require('path');
+const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
 
 // Apply stealth plugin
 puppeteer.use(StealthPlugin());
@@ -389,7 +390,7 @@ function updateProxyStatus(proxies, targetProxy, newStatus, proxyJsonFile) {
   puppeteer.use(StealthPlugin());
   
   const browser = await puppeteer.launch({
-    executablePath: getChromePath(),
+    executablePath: chromePath,
     headless: true,
     args: [ `--proxy-server=${proxy}`, '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage','--ignore-certificate-errors'],
   });
