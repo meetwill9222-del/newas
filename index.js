@@ -3,6 +3,7 @@
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const stealth = StealthPlugin();
+stealth.enabledEvasions.delete('sourceurl');
 const UserAgent = require('user-agents');
 const { faker } = require('@faker-js/faker');
 const fs = require('fs');
@@ -14,6 +15,8 @@ const path = require('path');
 const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
 const { execSync } = require('child_process');
 const treeKill = require('tree-kill');
+const { getUniqueWorkingProxy, releaseProxy } = require('./proxyManager');
+const useProxy = require("@lem0-packages/puppeteer-page-proxy");
 
 stealth.enabledEvasions.delete('chrome.app');
 stealth.enabledEvasions.delete('chrome.csi');
@@ -28,6 +31,7 @@ const insuranceDomains = require('./domains/insurance');
 const healthDomains = require('./domains/health');
 const educationDomains = require('./domains/education');
 const businessDomains = require('./domains/business');
+
 let browser = null; // NOTE: this variable will be set per worker; we keep this here for compatibility
 
 const categories = ['insurance', 'health', 'education', 'business'];
@@ -191,6 +195,15 @@ function makeLogger(workerId) {
   };
 }
 
+async function clearPageData(page) {
+  try {
+    const client = await page.target().createCDPSession();
+    await client.send('Network.clearBrowserCookies');
+    await client.send('Network.clearBrowserCache');
+    await page.evaluate(() => localStorage.clear());
+  } catch {}
+}
+
 // ---------------- SAFE BROWSER CLOSE ----------------
 async function safeCloseBrowser(browserRef, logger) {
   if (!browserRef) return;
@@ -252,22 +265,64 @@ async function ensureSinglePage(browserRef, logger) {
 }
 
 // safe goto helper (retry once, wait 5s before retry) — fixed to actually wait
-async function safeGoto(page, logger, url, timeout, retry = true) {
+async function safeGoto(page, logger, url, timeout = 60000, retry = true) {
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout });
-    logger.log(`✅ Navigated to: ${url}`);
-    // small wait to let page start loading (user requested)
-    await delay(10000);
+    const response = await page.goto(url, { waitUntil: 'networkidle2', timeout });
+    const status = response ? response.status() : null;
+
+    if (status && status >= 400) {
+      logger.warn(`⚠️ HTTP ${status} error while visiting ${url}`);
+
+      // Screenshot or log page title for debugging
+      try {
+        const title = await page.title();
+        logger.warn(`⚠️ Error page title: ${title}`);
+      } catch {}
+
+      if (retry) {
+        logger.warn('🔁 Retrying after HTTP error...');
+        await delay(5000);
+
+        const retryResponse = await page.goto(url, { waitUntil: 'networkidle2', timeout });
+        const retryStatus = retryResponse ? retryResponse.status() : null;
+
+        if (retryStatus && retryStatus >= 400) {
+          logger.error(`❌ Retry failed (HTTP ${retryStatus}) for ${url}`);
+          return false;
+        } else {
+          logger.log(`✅ Retry successful for: ${url}`);
+          await delay(10000);
+          return true;
+        }
+      } else {
+        return false;
+      }
+    }
+
+    logger.log(`✅ Navigated to: ${url} (status: ${status})`);
+    await delay(10000); // small post-load wait
     return true;
   } catch (e) {
-    logger.warn(`⚠️ Navigation failed (${url}): ${e.message || e}`);
+    logger.warn(`⚠️ Navigation error for ${url}: ${e.message || e}`);
 
-    const retryable = /net::ERR_TUNNEL_CONNECTION_FAILED|ERR_CONNECTION_REFUSED|Navigation timeout|ERR_SOCKS_CONNECTION_FAILED|ERR_CONNECT_TIMEOUT/i.test(e.message || '');
+    const retryable =
+      /net::ERR_TUNNEL_CONNECTION_FAILED|ERR_CONNECTION_REFUSED|Navigation timeout|ERR_SOCKS_CONNECTION_FAILED|ERR_CONNECT_TIMEOUT|Target closed/i.test(
+        e.message || ''
+      );
+
     if (retry && retryable) {
-      logger.warn('🔁 Retrying navigation in 5 seconds due to network error...');
-      await delay(5000); // <--- ensure we actually wait
+      logger.warn('🔁 Retrying navigation in 5 seconds...');
+      await delay(5000);
+
       try {
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout });
+        const retryResponse = await page.goto(url, { waitUntil: 'networkidle2', timeout });
+        const retryStatus = retryResponse ? retryResponse.status() : null;
+
+        if (retryStatus && retryStatus >= 400) {
+          logger.error(`❌ Retry failed (HTTP ${retryStatus}) for ${url}`);
+          return false;
+        }
+
         logger.log(`✅ Retry successful for: ${url}`);
         await delay(10000);
         return true;
@@ -276,13 +331,16 @@ async function safeGoto(page, logger, url, timeout, retry = true) {
         return false;
       }
     }
+
     return false;
   }
 }
 
+
 // visitRandomTechnologymaniasLinks (kept your logic; uses safeGoto)
 async function visitRandomTechnologymaniasLinks(page, browserRef, logger) {
-  const repeatCount = getRandomInt(4, 10);
+  const repeatCount = getRandomInt(7, 15);
+  let visitCount = 0;
   logger.log(`🔁 Visiting up to ${repeatCount} technologymanias.com links`);
 
   for (let i = 0; i < repeatCount; i++) {
@@ -310,13 +368,12 @@ async function visitRandomTechnologymaniasLinks(page, browserRef, logger) {
         const ok = await safeGoto(page, logger, randomLink, 60000, true);
         if (!ok) {
           logger.error('❌ Bing navigation failed after retry — stopping this browser.');
-          clearTimeout(watchdog);
           await safeCloseBrowser(browserRef, logger);
           await delay(5000);
           return; // stop this worker cycle
         }
         logger.log(`✅ Navigated to: ${page.url()}`);
-
+        visitCount++;
         logger.log(`✅ Loading Ads `);
 
         // Wait for AdSense script to load
@@ -342,6 +399,42 @@ async function visitRandomTechnologymaniasLinks(page, browserRef, logger) {
       logger.log(`📜 Scrolling on page...`);
       await humanScroll(page, 5000, 10000);
 
+      if (visitCount % 2 === 0) {
+      logger.log('🖱️ 10th visit reached — clicking AdSense ad...');
+
+      try {
+          const adSelector = 'ins.adsbygoogle';
+          await page.waitForSelector(adSelector, { timeout: 10000 });
+
+          const adBox = await page.$eval(adSelector, el => {
+            const rect = el.getBoundingClientRect();
+            return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+          });
+
+          const clickX = adBox.x + adBox.width / 2;
+          const clickY = adBox.y + adBox.height / 2;
+
+          await page.mouse.move(clickX, clickY);
+          await page.mouse.click(clickX, clickY, { button: 'left' });
+          logger.log('🖱️ Clicked AdSense ad');
+
+          // Handle new tab
+          const pages = await browserRef.pages();
+          const newPage = pages[pages.length - 1]; // last opened tab
+          await useProxy(newPage, proxy);
+          await newPage.bringToFront();
+
+          logger.log('🆕 New tab opened for ad — waiting 60s and scrolling...');
+          await humanScroll(newPage, 5000, 60000);
+          await delay(60000);
+          await newPage.close();
+          logger.log('✅ Ad tab closed, continuing visits...');
+        } catch (err) {
+          logger.warn('⚠️ Failed to click ad or process new tab:', err.message || err);
+        }
+      }
+
+
       const delayTime = Math.random() * 10000 + 20000;
       logger.log(`⏱️  Waiting ${Math.round(delayTime / 1000)} seconds before next iteration...`);
       await delay(delayTime);
@@ -353,19 +446,35 @@ async function visitRandomTechnologymaniasLinks(page, browserRef, logger) {
 
 // === MAIN worker loop: keep your logic but robust lifecycle handling ===
 async function runWorkerLoop(workerId) {
-   try {
-        execSync("ps -ef | grep '[c]hrome' | awk '{print $2}' | xargs -r kill -9");
-        console.log('✅ Cleared old Chrome processes');
-      } catch (err) {
-        console.log('⚠️ No Chrome processes to clear or error occurred');
-      }
+  //  try {
+  //       execSync("ps -ef | grep '[c]hrome' | awk '{print $2}' | xargs -r kill -9");
+  //       console.log('✅ Cleared old Chrome processes');
+  //     } catch (err) {
+  //       console.log('⚠️ No Chrome processes to clear or error occurred');
+  //     }
   const logger = makeLogger(workerId);
   let localBrowser = null;
   let localPage = null;
 
+  // Launch browser for this worker
+  localBrowser = await puppeteer.launch({
+    // userDataDir: '/tmp/puppeteer_profile',
+    headless: false,
+    args: [
+      // `--proxy-server=${proxy}`,
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--ignore-certificate-errors',
+      '--disable-gpu',
+    ],
+  });
+
+  logger.log('🟢 Browser launched for worker', workerId);
+
   while (true) {
     try {
-
+      
       // read keywords
       const KeyLines = fs.readFileSync('key.txt', 'utf-8')
         .split('\n').map(line => line.trim()).filter(Boolean);
@@ -373,13 +482,13 @@ async function runWorkerLoop(workerId) {
       const keyword = getRandomFromArray(KeyLines);
       logger.log(`🧠 Selected keyword: ${keyword}`);
 
-      // fetch proxy list
-      const proxyList = (await (await fetch('https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list/http.txt')).text())
-        .split('\n').map(l => l.trim()).filter(Boolean);
+      proxy = await getUniqueWorkingProxy(workerId, logger);
+      if (!proxy) {
+        logger.error(`WORKER-${workerId}: 🚫 No valid proxy available`);
+        await localPage.close();
+        return;
+      }
 
-      if (!proxyList.length) throw new Error('Proxy list is empty');
-
-      const proxy = getRandomFromArray(proxyList);
       const userAgent = getCustomUserAgent();
       const category = getRandomFromArray(categories);
       const cookies = generateCookies(category);
@@ -389,26 +498,10 @@ async function runWorkerLoop(workerId) {
       logger.log(`🌐 Launching browser with proxy: ${proxy}`);
 
       // If previous browser exists and is still alive, close it first
-      if (localBrowser && isBrowserAlive(localBrowser)) {
-        logger.warn('⚠️ Previous browser still alive — closing it before launch');
-        clearTimeout(watchdog);
-        await safeCloseBrowser(localBrowser, logger);
-      }
-
-     
-
-      // Launch browser for this worker
-      localBrowser = await puppeteer.launch({
-        headless: false,
-        args: [
-          `--proxy-server=${proxy}`,
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--ignore-certificate-errors',
-          '--disable-gpu',
-        ],
-      });
+      // if (localBrowser && isBrowserAlive(localBrowser)) {
+      //   logger.warn('⚠️ Previous browser still alive — closing it before launch');
+      //   await safeCloseBrowser(localBrowser, logger);
+      // }
 
       // store in top-level variable too (keeps compatibility with existing spots expecting `browser`)
       browser = localBrowser;
@@ -419,18 +512,30 @@ async function runWorkerLoop(workerId) {
 
       // create page and ensure only one page exists
       localPage = await localBrowser.newPage();
+      await delay(500);
+      await useProxy(localPage, proxy);
+      await delay(500);
+      // await localPage.setRequestInterception(true);
+      //   localPage.on('request', async (request) => {
+      //       await useProxy(request, 'http://138.68.60.8:8080');
+      //   });
+
+      // const data = await useProxy.lookup(localPage);
+      // console.log(data.ip);
+
+      await clearPageData(localPage);
+      
 
       // ensure single tab — close extras if any popped
-      try {
-        localPage = await ensureSinglePage(localBrowser, logger);
-      } catch (e) {
-        logger.warn('⚠️ ensureSinglePage failed after launch:', e.message || e);
-      }
+      // try {
+      //   localPage = await ensureSinglePage(localBrowser, logger);
+      // } catch (e) {
+      //   logger.warn('⚠️ ensureSinglePage failed after launch:', e.message || e);
+      // }
 
       if (!localPage) {
         logger.error('❌ Could not create page; closing browser and retrying');
-        clearTimeout(watchdog);
-        await safeCloseBrowser(localBrowser, logger);
+        // await safeCloseBrowser(localBrowser, logger);
         await delay(3000);
         continue; // restart worker loop to launch fresh browser
       }
@@ -447,13 +552,6 @@ async function runWorkerLoop(workerId) {
       localPage.on('close', () => {
         logger.warn('⚠️ Page closed event triggered');
       });
-
-      // watchdog to kill stuck browser
-      const watchdog = setTimeout(async () => {
-        logger.warn('⏰ Watchdog timeout — killing stuck browser');
-        clearTimeout(watchdog);
-        await safeCloseBrowser(localBrowser, logger);
-      }, 180000); // 3 minutes
 
       // --- Mobile device emulation ---
       const isMobile = /Mobile|Android|iPhone|iPad/i.test(userAgent);
@@ -483,9 +581,9 @@ async function runWorkerLoop(workerId) {
       const bingOk = await safeGoto(localPage, logger, searchUrl, 60000, true);
       if (!bingOk) {
         logger.error('❌ Bing navigation failed after retry — stopping this browser.');
-        clearTimeout(watchdog);
-        await safeCloseBrowser(localBrowser, logger);
-        localBrowser = null;
+        if (localPage && !localPage.isClosed()) await localPage.close();
+        // await safeCloseBrowser(localBrowser, logger);
+        // localBrowser = null;
         localPage = null;
         await delay(5000);
         continue; // start next iteration (will launch new browser)
@@ -493,71 +591,75 @@ async function runWorkerLoop(workerId) {
 
       await delay(1000);
 
-      let links = [];
-      try {
-        if (isMobile) {
-          await localPage.waitForSelector('li.b_algo a', { timeout: 30000 });
-          links = await localPage.$$eval('li.b_algo a', anchors => anchors.map(a => a.href));
-        } else {
-          await localPage.waitForSelector('li.b_algo h2 a', { timeout: 30000 });
-          links = await localPage.$$eval('li.b_algo h2 a', anchors => anchors.map(a => a.href));
-        }
-        logger.log(`🔗 Found ${links.length} Bing search result links`);
-      } catch {
-        logger.warn('⚠️  Bing search results not found');
-        clearTimeout(watchdog);
-        await safeCloseBrowser(localBrowser, logger);
-        localBrowser = null;
-        localPage = null;
-        continue;
-      }
+      // let links = [];
+      // try {
+      //   if (isMobile) {
+      //     await localPage.waitForSelector('li.b_algo a', { timeout: 30000 });
+      //     links = await localPage.$$eval('li.b_algo a', anchors => anchors.map(a => a.href));
+      //   } else {
+      //     await localPage.waitForSelector('li.b_algo h2 a', { timeout: 30000 });
+      //     links = await localPage.$$eval('li.b_algo h2 a', anchors => anchors.map(a => a.href));
+      //   }
+      //   logger.log(`🔗 Found ${links.length} Bing search result links`);
+      // } catch {
+      //   logger.warn('⚠️  Bing search results not found');
+      //   if (localPage && !localPage.isClosed()) await localPage.close();
+      //   // await safeCloseBrowser(localBrowser, logger);
+      //   // localBrowser = null;
+      //   localPage = null;
+      //   continue;
+      // }
 
-      if (links.length > 0) {
-        const randomLink = getRandomFromArray(links);
-        logger.log(`🎯 Clicking random result: ${randomLink}`);
+      // if (links.length > 0) {
+      //   const randomLink = getRandomFromArray(links);
+      //   logger.log(`🎯 Clicking random result: ${randomLink}`);
 
-        const linkOk = await safeGoto(localPage, logger, randomLink, 60000, true);
-        if (!linkOk) {
-          logger.error('❌ Target site failed after retry — closing browser.');
-          clearTimeout(watchdog);
-          await safeCloseBrowser(localBrowser, logger);
-          localBrowser = null;
-          localPage = null;
-          await delay(5000);
-          continue;
-        }
+      //   const linkOk = await safeGoto(localPage, logger, randomLink, 60000, true);
+      //   if (!linkOk) {
+      //     logger.error('❌ Target site failed after retry — closing browser.');
+      //     // await safeCloseBrowser(localBrowser, logger);
+      //     // localBrowser = null;
+      //     if (localPage && !localPage.isClosed()) await localPage.close();
+      //     localPage = null;
+      //     await delay(5000);
+      //     continue;
+      //   }
 
-        await delay(Math.random() * 1000 + 200);
+      //   await delay(Math.random() * 1000 + 200);
 
-        try {
-          const clicked = await localPage.evaluate(() => {
-            const buttons = Array.from(document.querySelectorAll('button'));
-            const consentBtn = buttons.find(b => /accept|agree|ok/i.test(b.innerText));
-            if (consentBtn) { consentBtn.click(); return true; }
-            return false;
-          });
+      //   try {
+      //     const clicked = await localPage.evaluate(() => {
+      //       const buttons = Array.from(document.querySelectorAll('button'));
+      //       const consentBtn = buttons.find(b => /accept|agree|ok/i.test(b.innerText));
+      //       if (consentBtn) { consentBtn.click(); return true; }
+      //       return false;
+      //     });
 
-          if (clicked) logger.log("✅ Accepted cookie consent");
-          else logger.log("ℹ️  No cookie consent button found");
-          await delay(Math.random() * 2000 + 500);
-        } catch (err) {
-          logger.warn("⚠️ Error trying to accept cookies:", err.message);
-        }
+      //     if (clicked) logger.log("✅ Accepted cookie consent");
+      //     else logger.log("ℹ️  No cookie consent button found");
+      //     await delay(Math.random() * 2000 + 500);
+      //   } catch (err) {
+      //     logger.warn("⚠️ Error trying to accept cookies:", err.message);
+      //   }
 
-        await delay(Math.random() * 4000 + 100);
-        logger.log(`✅ Finished visiting: ${localPage.url()}`);
-      } else logger.warn('⚠️ No valid search result links found');
+      //   await delay(Math.random() * 4000 + 100);
+      //   logger.log(`✅ Finished visiting: ${localPage.url()}`);
+      // } else logger.warn('⚠️ No valid search result links found');
 
       // navigates to technologymanias site
       const techOk = await safeGoto(localPage, logger, 'https://insurance.technologymanias.com/', 90000, true);
       if (!techOk) {
         logger.error('❌ technologymanias.com not reachable — closing browser.');
-        clearTimeout(watchdog);
-        await safeCloseBrowser(localBrowser, logger);
-        localBrowser = null;
+        // await safeCloseBrowser(localBrowser, logger);
+        // localBrowser = null;
+        if (localPage && !localPage.isClosed()) await localPage.close();
         localPage = null;
         await delay(5000);
         continue;
+      }
+      else{
+        // const html = await localPage.content();
+        // console.log(html);
       }
 
       logger.log('📜 Loading ads...');
@@ -590,9 +692,9 @@ async function runWorkerLoop(workerId) {
       await visitRandomTechnologymaniasLinks(localPage, localBrowser, logger);
 
       // cleanup & next run
-      clearTimeout(watchdog);
-      await safeCloseBrowser(localBrowser, logger);
-      localBrowser = null;
+      // await safeCloseBrowser(localBrowser, logger);
+      // localBrowser = null;
+      if (localPage && !localPage.isClosed()) await localPage.close();
       localPage = null;
       const nextDelay = Math.random() * 1500 + 500;
       logger.log(`⏳ Waiting ${nextDelay.toFixed(0)}ms before next run...`);
@@ -603,18 +705,19 @@ async function runWorkerLoop(workerId) {
       // network / proxy specific errors: close browser and restart worker cycle
       if (/ERR_TUNNEL_CONNECTION_FAILED|ECONNREFUSED|network|timeout|ERR_SOCKS_CONNECTION_FAILED|ERR_CONNECT_TIMEOUT/i.test(err && err.message ? err.message : '')) {
         logger.error('🚫 Network/Proxy issue detected — stopping this browser instance.');
-        if (localBrowser) clearTimeout(watchdog); await safeCloseBrowser(localBrowser, logger);
-        localBrowser = null;
+        if (localPage && !localPage.isClosed()) await localPage.close();
+        // localBrowser = null;
         localPage = null;
         await delay(5000);
         continue; // start new iteration (new browser)
       }
 
       // If protocol errors (target closed etc.) happened, just close and restart
-      if (localBrowser) {
-        try { clearTimeout(watchdog); await safeCloseBrowser(localBrowser, logger); } catch (e) { /* ignore */ }
-      }
-      localBrowser = null;
+      // if (localBrowser) {
+      //   try { await safeCloseBrowser(localBrowser, logger); } catch (e) { /* ignore */ }
+      // }
+      // localBrowser = null;
+      if (localPage && !localPage.isClosed()) await localPage.close();
       localPage = null;
       await delay(5000);
     }
@@ -623,7 +726,7 @@ async function runWorkerLoop(workerId) {
 
 // === pool manager: Start N workers sequentially with delay and keep them running ===
 (async () => {
-  const numInstances = 2; // max parallel browsers desired
+  const numInstances = 1; // max parallel browsers desired
   const workerPromises = [];
 
   for (let i = 0; i < numInstances; i++) {
