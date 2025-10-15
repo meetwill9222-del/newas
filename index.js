@@ -401,39 +401,73 @@ async function visitRandomTechnologymaniasLinks(page, browserRef, logger) {
 
       if (visitCount % 2 === 0) {
       logger.log('🖱️ 10th visit reached — clicking AdSense ad...');
-
       try {
-          const adSelector = 'ins.adsbygoogle';
-          await page.waitForSelector(adSelector, { timeout: 10000 });
+        const adSelector = 'ins.adsbygoogle';
+        await page.waitForSelector(adSelector, { timeout: 10000 });
 
-          const adBox = await page.$eval(adSelector, el => {
-            const rect = el.getBoundingClientRect();
-            return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-          });
+        const adBox = await page.$eval(adSelector, el => {
+          const rect = el.getBoundingClientRect();
+          return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+        });
 
-          const clickX = adBox.x + adBox.width / 2;
-          const clickY = adBox.y + adBox.height / 2;
+        const clickX = adBox.x + adBox.width / 2;
+        const clickY = adBox.y + adBox.height / 2;
 
-          await page.mouse.move(clickX, clickY);
-          await page.mouse.click(clickX, clickY, { button: 'left' });
-          logger.log('🖱️ Clicked AdSense ad');
+        const pagesBefore = await browserRef.pages();
 
-          // Handle new tab
-          const pages = await browserRef.pages();
-          const newPage = pages[pages.length - 1]; // last opened tab
-          await useProxy(newPage, proxy);
+        await page.mouse.move(clickX, clickY);
+        await page.mouse.click(clickX, clickY, { button: 'left' });
+        logger.log('🖱️ Clicked AdSense ad');
+
+        // 🕒 Wait briefly to detect a new tab
+        await delay(4000);
+
+        const pagesAfter = await browserRef.pages();
+        const newPage = pagesAfter.find(p => !pagesBefore.includes(p));
+
+        // CASE 1️⃣: New tab opened
+        if (newPage) {
+          logger.log('🆕 New tab detected for ad — applying proxy...');
+          try { await newPage.setRequestInterception(false); } catch {}
+
+          try {
+            if (typeof useProxy === 'function' && proxy) {
+              await useProxy(newPage, proxy);
+            }
+          } catch (proxyErr) {
+            logger.warn(`⚠️ Proxy not applied on ad tab: ${proxyErr.message}`);
+          }
+
           await newPage.bringToFront();
-
-          logger.log('🆕 New tab opened for ad — waiting 60s and scrolling...');
+          logger.log('🌐 Waiting 60s and scrolling ad tab...');
           await humanScroll(newPage, 5000, 60000);
           await delay(60000);
-          await newPage.close();
+
+          try { await newPage.close({ runBeforeUnload: true }); } catch {}
           logger.log('✅ Ad tab closed, continuing visits...');
-        } catch (err) {
+        }
+
+        // CASE 2️⃣: No new tab — same tab redirect
+        else {
+          logger.log('↪️ Ad clicked but no new tab detected — handling redirect on same page');
+          await delay(5000);
+
+          try {
+            await humanScroll(page, 5000, 60000);
+            await delay(60000);
+            logger.log('✅ Finished ad visit on same page, going back...');
+            await page.goBack({ waitUntil: 'domcontentloaded', timeout: 30000 });
+          } catch (backErr) {
+            logger.warn(`⚠️ Could not return from ad page: ${backErr.message}`);
+          }
+        }
+      } catch (err) {
+        if (!/Session closed|Request is already handled/i.test(err.message)) {
           logger.warn('⚠️ Failed to click ad or process new tab:', err.message || err);
         }
       }
 
+      }
 
       const delayTime = Math.random() * 10000 + 20000;
       logger.log(`⏱️  Waiting ${Math.round(delayTime / 1000)} seconds before next iteration...`);
