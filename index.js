@@ -493,7 +493,7 @@ async function runWorkerLoop(workerId) {
   // Launch browser for this worker
   localBrowser = await puppeteer.launch({
     // userDataDir: '/tmp/puppeteer_profile',
-    headless: false,
+    headless: true,
     args: [
       // `--proxy-server=${proxy}`,
       '--no-sandbox',
