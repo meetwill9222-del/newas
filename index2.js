@@ -14,7 +14,7 @@ const path = require('path');
 const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
 const { execSync } = require('child_process');
 const treeKill = require('tree-kill');
-const { getUniqueWorkingProxy, releaseProxy } = require('./proxyManager');
+const { getUniqueWorkingProxy, releaseProxy } = require('./proxyManager2');
 
 stealth.enabledEvasions.delete('chrome.app');
 stealth.enabledEvasions.delete('chrome.csi');

@@ -23,6 +23,8 @@
     "axios": "^1.7.0",
     "http-proxy-agent": "^7.0.0",
     "https-proxy-agent": "^7.0.0",
+    "node-fetch": "^3.3.2",
+    "playwright": "^1.56.0",
     "puppeteer": "^24.23.0",
     "puppeteer-extra": "^3.3.5",
     "puppeteer-extra-plugin-stealth": "^2.11.1",
