@@ -399,7 +399,7 @@ async function visitRandomTechnologymaniasLinks(page, browserRef, logger) {
       logger.log(`📜 Scrolling on page...`);
       await humanScroll(page, 5000, 10000);
 
-      if (visitCount % 2 === 0) {
+      if (visitCount % 7 === 0) {
       logger.log('🖱️ 10th visit reached — clicking AdSense ad...');
       try {
         const adSelector = 'ins.adsbygoogle';
@@ -760,7 +760,7 @@ async function runWorkerLoop(workerId) {
 
 // === pool manager: Start N workers sequentially with delay and keep them running ===
 (async () => {
-  const numInstances = 1; // max parallel browsers desired
+  const numInstances = 3; // max parallel browsers desired
   const workerPromises = [];
 
   for (let i = 0; i < numInstances; i++) {
