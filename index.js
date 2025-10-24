@@ -85,59 +85,68 @@ function getRandomFromArray(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function generateCookies(category) {
-  const domain = getRandomFromArray(categoryDomains[category]);
-  const now = Math.floor(Date.now() / 1000);
-  const oneYearLater = now + 60 * 60 * 24 * 365;
-
-  const baseCookies = [
-    {
-      name: 'interest',
-      value: category,
-      domain,
-      path: '/',
-      expirationDate: oneYearLater,
-      sameSite: 'Lax',
-      httpOnly: false,
-      secure: false,
-      session: false,
-      storeId: '0',
-    },
-    {
-      name: 'session_id',
-      value: faker.string.uuid(),
-      domain,
-      path: '/',
-      sameSite: 'Lax',
-      httpOnly: true,
-      secure: true,
-      session: true,
-      storeId: '0',
-    },
-  ];
-
-  const extraCookies = {
-    insurance: { name: 'policy_num', value: 'PN-' + faker.number.int({ min: 100000, max: 999999 }) },
-    health: { name: 'health_session', value: faker.string.alphanumeric(24) },
-    education: { name: 'edu_user', value: faker.internet.username() },
-    business: { name: 'biz_visitor', value: faker.string.uuid() },
-  };
-
-  const extra = extraCookies[category];
-  if (extra) {
-    baseCookies.push({
-      ...extra,
-      domain,
-      path: '/',
-      expirationDate: oneYearLater,
-      sameSite: 'Lax',
-      secure: true,
-      session: category !== 'health',
-      httpOnly: category === 'health',
-      storeId: '0',
-    });
+function generateCookies(category, count) {
+  const domains = categoryDomains[category];
+  const pickRandomDomain = () => domains[Math.floor(Math.random() * domains.length)];
+  
+  const cookiesAll = [];
+  for (let i = 0; i < count; i++) {
+    const domain = pickRandomDomain();
+    const now = Math.floor(Date.now() / 1000);
+    const oneYearLater = now + 60 * 60 * 24 * 365;
+    
+    const baseCookies = [
+      {
+        name: 'interest',
+        value: category,
+        domain,
+        path: '/',
+        expirationDate: oneYearLater,
+        sameSite: 'Lax',
+        httpOnly: false,
+        secure: false,
+        session: false,
+        storeId: '0',
+      },
+      {
+        name: 'session_id',
+        value: faker.string.uuid(),
+        domain,
+        path: '/',
+        sameSite: 'Lax',
+        httpOnly: true,
+        secure: true,
+        session: true,
+        storeId: '0',
+      },
+    ];
+    
+    const extraCookies = {
+      insurance: { name: 'policy_num', value: 'PN-' + faker.number.int({ min: 100000, max: 999999 }) },
+      health: { name: 'health_session', value: faker.string.alphanumeric(24) },
+      education: { name: 'edu_user', value: faker.internet.username() },
+      business: { name: 'biz_visitor', value: faker.string.uuid() },
+    };
+    
+    const extra = extraCookies[category];
+    if (extra) {
+      baseCookies.push({
+        name: extra.name,
+        value: extra.value,
+        domain,
+        path: '/',
+        expirationDate: oneYearLater,
+        sameSite: 'Lax',
+        secure: true,
+        session: category !== 'health',
+        httpOnly: category === 'health',
+        storeId: '0',
+      });
+    }
+    
+    cookiesAll.push(...baseCookies);
   }
-  return baseCookies;
+  return cookiesAll;
 }
 
 function getCustomUserAgent() {
@@ -145,31 +154,50 @@ function getCustomUserAgent() {
   return new UserAgent({ deviceCategory: isMobile ? 'mobile' : 'desktop' }).toString();
 }
 
+// custom delay function
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function humanScroll(page, minTime = 5000, maxTime = 10000) {
   if (page.isClosed()) return;
-  await page.waitForFunction(() => document && document.documentElement !== null);
 
-  const repeatCount = Math.floor(Math.random() * 2) + 2;
+  // wait for the page content to be ready
+  await page.waitForFunction(() => document && document.documentElement, { timeout: 10000 });
+
+  const repeatCount = Math.floor(Math.random() * 2) + 2; // 2-3 passes
 
   for (let pass = 0; pass < repeatCount; pass++) {
     let hasMore = true;
+
     while (hasMore) {
+      // scroll down in smaller increments
       hasMore = await page.evaluate(() => {
-        const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
-        window.scrollBy(0, clientHeight / 4);
-        return scrollTop + clientHeight < scrollHeight;
+        const doc = document.documentElement;
+        const { scrollTop, scrollHeight, clientHeight } = doc;
+        const distance = clientHeight * (0.2 + Math.random() * 0.1); // 20-30% viewport
+        window.scrollBy(0, distance);
+        return scrollTop + clientHeight + distance < scrollHeight;
       });
-      await new Promise(r => setTimeout(r, Math.random() * 300 + 200));
+
+      // simulate human pause, random between 150-400ms
+      await delay(150 + Math.random() * 250);
     }
 
-    for (let i = 0; i < 10; i++) {
-      await page.evaluate(() => window.scrollBy(0, -window.innerHeight / 4));
-      await new Promise(r => setTimeout(r, Math.random() * 300 + 200));
+    // scroll up a bit for “look back” effect
+    const upPasses = 5 + Math.floor(Math.random() * 5);
+    for (let i = 0; i < upPasses; i++) {
+      const upDistance = await page.evaluate(() => window.innerHeight * (0.2 + Math.random() * 0.1));
+      await page.evaluate(d => window.scrollBy(0, -d), upDistance);
+      await delay(150 + Math.random() * 250);
     }
   }
 
-  await new Promise(r => setTimeout(r, Math.random() * (maxTime - minTime) + minTime));
+  // final pause
+  const pauseTime = minTime + Math.random() * (maxTime - minTime);
+  await delay(pauseTime);
 }
+
 
 function getRandomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -365,7 +393,7 @@ async function visitRandomTechnologymaniasLinks(page, browserRef, logger) {
       logger.log(`🎯 Navigating to: ${randomLink}`);
 
       try {
-        const ok = await safeGoto(page, logger, randomLink, 60000, true);
+        const ok = await safeGoto(page, logger, randomLink, 80000, true);
         if (!ok) {
           logger.error('❌ Bing navigation failed after retry — stopping this browser.');
           await safeCloseBrowser(browserRef, logger);
@@ -397,7 +425,7 @@ async function visitRandomTechnologymaniasLinks(page, browserRef, logger) {
       }
 
       logger.log(`📜 Scrolling on page...`);
-      await humanScroll(page, 5000, 10000);
+      await humanScroll(page, 7000, 12000);
 
       if (visitCount % 7 === 0) {
       logger.log('🖱️ 10th visit reached — clicking AdSense ad...');
@@ -469,7 +497,7 @@ async function visitRandomTechnologymaniasLinks(page, browserRef, logger) {
 
       }
 
-      const delayTime = Math.random() * 10000 + 20000;
+      const delayTime = Math.random() * (60_000 - 30_000) + 30_000;
       logger.log(`⏱️  Waiting ${Math.round(delayTime / 1000)} seconds before next iteration...`);
       await delay(delayTime);
     } else {
@@ -522,10 +550,16 @@ async function runWorkerLoop(workerId) {
         await localPage.close();
         return;
       }
+      if (!proxy || !proxy.includes(':')) {
+        console.log('Skipping invalid proxy:', proxy);
+        return;
+      }
 
       const userAgent = getCustomUserAgent();
       const category = getRandomFromArray(categories);
-      const cookies = generateCookies(category);
+      // const cookies = generateCookies(category);
+      const count = 5 + Math.floor(Math.random() * 6); // gives 5..10
+      const cookies = generateCookies(category, count);
 
       logger.log(`🧠 Selected category: ${category}`);
       logger.log(`🕵️‍♂️ Using User-Agent: ${userAgent}`);
@@ -547,7 +581,15 @@ async function runWorkerLoop(workerId) {
       // create page and ensure only one page exists
       localPage = await localBrowser.newPage();
       await delay(500);
-      await useProxy(localPage, proxy);
+      try {
+        await useProxy(localPage, proxyUrl);
+        // do your actions here
+      } catch (err) {
+        console.log(`❌ Proxy failed: ${proxyUrl}`, err.message);
+        // optionally close page and open a new one
+        if (!page.isClosed()) await page.close();
+        return; // skip to next proxy
+      }
       await delay(500);
       // await localPage.setRequestInterception(true);
       //   localPage.on('request', async (request) => {
@@ -601,6 +643,8 @@ async function runWorkerLoop(workerId) {
       }
 
       await localPage.setCookie(...cookies);
+      const currentCookies = await localPage.cookies();  // or await page.cookies(url) if you provide URL
+      console.log(currentCookies);
       // await localPage.mouse.move(100, 100);
       await localPage.setExtraHTTPHeaders({
         'accept-language': 'en-US,en;q=0.9',

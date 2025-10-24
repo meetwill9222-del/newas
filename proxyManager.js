@@ -13,8 +13,9 @@ let lastFirstProxy = null;
 let fetching = false;
 
 // You can switch the source file here:
-// let proxyurl = "https://raw.githubusercontent.com/dpangestuw/Free-Proxy/refs/heads/main/socks5_proxies.txt";
-let proxyurl = "https://raw.githubusercontent.com/dpangestuw/Free-Proxy/refs/heads/main/allive.txt";
+// let proxyurl = "https://raw.githubusercontent.com/databay-labs/free-proxy-list/refs/heads/master/http.txt";
+let proxyurl = "https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/http.txt";
+// let proxyurl = "https://raw.githubusercontent.com/dpangestuw/Free-Proxy/refs/heads/main/allive.txt";
 // let proxyurl = "https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list/http.txt";
 
 function parseProxy(raw) {
